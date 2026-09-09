@@ -209,21 +209,6 @@ Then open `http://localhost:5173`, **Sign Up**, and start using it.
 
 ---
 
-## 🛠 Troubleshooting (issues actually solved in this project)
-
-| Symptom | Cause | Fix |
-|---|---|---|
-| `SyntaxError: Missing parentheses in call to 'print'` in `jose.py` | Wrong PyPI package `jose` (Python-2 era) shadowing `python-jose` | `pip uninstall jose` then `pip install "python-jose[cryptography]"` |
-| `ModuleNotFoundError: No module named 'boto3'` | Deps not installed in active env | `pip install -r requirements.txt` inside the venv |
-| UI unstyled / "No utility classes detected" | Tailwind `content` globs miss your component folders | Add every JSX folder to `tailwind.config.cjs` → `content`, then `rmdir /s /q node_modules\.vite` and restart |
-| `[postcss] plugins.forEach is not a function` | Tailwind **v4** installed into a v3 codebase | `npm i -D tailwindcss@3 postcss@8 autoprefixer@10` and use `.cjs` configs |
-| Login works but page doesn't change | Missing redirect after auth | `navigate('/')` after login + `<Navigate to="/">` guard when token exists |
-| Files "disappeared" | Second empty SQLite DB created (relative DB path + different CWD) | Always run backend from `backend/`; check `dir /s /b *.db` |
-| Phone/LAN: "Connection error… port 8000" | `localhost` in axios baseURL = the phone itself | Use `VITE_API_URL` or hostname fallback; `server.host: true`; allow ports in firewall; CORS regex for LAN IPs |
-| Vite on port 5174/5175 | Old server still holding 5173 | `taskkill /F /IM node.exe`, restart, use printed URL |
-
----
-
 ## 🔐 Security Model
 
 - Bucket is **private**; no public URLs, no bucket policy — access only via IAM keys + pre-signed URLs (15 min, single object)
@@ -232,6 +217,8 @@ Then open `http://localhost:5173`, **Sign Up**, and start using it.
 - Least-privilege IAM policy scoped to one bucket
 - CORS restricted to known origins (regex only for local/LAN dev)
 - Upload size capped (50 MB); inputs validated by Pydantic at the boundary
+- Rate Limiting
+- JWT Revocation
 
 ---
 
