@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime,timedelta
 from uuid import uuid4
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -286,3 +286,34 @@ def folder_options(db: Session, user: User, exclude_id: int | None) -> list[dict
         if f.id not in excluded:
             options.append({"id": f.id, "name": path_of(f)})
     return options
+
+TRASH_RETENTION_DAYS = 30   # S3 + DB purge after this long in Trash
+
+
+def purge_expired_trash(db: Session) -> int:
+    """Background cleanup: remove trash older than retention from S3 AND DB."""
+    cutoff = datetime.utcnow() - timedelta(days=TRASH_RETENTION_DAYS)
+    expired = db.query(Item).filter(
+        Item.deleted_at.isnot(None), Item.deleted_at < cutoff).all()
+    if not expired:
+        return 0
+    for item in expired:
+        if not item.is_folder and item.s3_key:
+            s3_service.delete_file(item.s3_key)      # bytes leave AWS here
+    for item in expired:
+        db.delete(item)                              # cascades to item_shares
+    db.commit()
+    return len(expired)
+
+
+def empty_trash(db: Session, user: User) -> int:
+    """User-triggered: permanently delete everything in my trash (S3 + DB)."""
+    trashed = db.query(Item).filter(
+        Item.owner_id == user.id, Item.deleted_at.isnot(None)).all()
+    for item in trashed:
+        if not item.is_folder and item.s3_key:
+            s3_service.delete_file(item.s3_key)
+    for item in trashed:
+        db.delete(item)
+    db.commit()
+    return len(trashed)

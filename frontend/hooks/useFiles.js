@@ -39,6 +39,7 @@ export default function useFiles() {
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
+  // ── uploads & duplicate conflicts ───────────────────────────────
   const uploadOne = async (file, action) => {
     const fd = new FormData();
     fd.append('file', file);
@@ -67,27 +68,31 @@ export default function useFiles() {
 
   const cancelConflicts = () => setConflictQueue([]);
 
-  const createFolder = async (name) => { await api.post('/api/files/folders', { name, parent_id: folderId }); await fetchItems(); };
-  const renameItem = async (id, name) => { await api.post(`/api/files/${id}/rename`, { name }); await fetchItems(); };
-  const moveItem = async (id, target) => { await api.post(`/api/files/${id}/move`, { parent_id: target }); await fetchItems(); };
-  const copyItem = async (id) => { await api.post(`/api/files/${id}/copy`); await fetchItems(); };
-  const deleteItem = async (id) => { await api.delete(`/api/files/${id}`); await fetchItems(); };
-  const restoreItem = async (id) => { await api.post(`/api/files/${id}/restore`); await fetchItems(); };
-  const deleteForever = async (id) => { await api.delete(`/api/files/${id}/permanent`); await fetchItems(); };
-  const shareItem = async (id, email) => api.post(`/api/files/${id}/share`, { email });
-  const downloadItem = async (id) => {
+  // ── CRUD actions ────────────────────────────────────────────────
+  const createFolder  = async (name)   => { await api.post('/api/files/folders', { name, parent_id: folderId }); await fetchItems(); };
+  const renameItem    = async (id, name) => { await api.post(`/api/files/${id}/rename`, { name }); await fetchItems(); };
+  const moveItem      = async (id, target) => { await api.post(`/api/files/${id}/move`, { parent_id: target }); await fetchItems(); };
+  const copyItem      = async (id)     => { await api.post(`/api/files/${id}/copy`); await fetchItems(); };
+  const deleteItem    = async (id)     => { await api.delete(`/api/files/${id}`); await fetchItems(); };
+  const restoreItem   = async (id)     => { await api.post(`/api/files/${id}/restore`); await fetchItems(); };
+  const deleteForever = async (id)     => { await api.delete(`/api/files/${id}/permanent`); await fetchItems(); };
+  const emptyTrash    = async ()       => { await api.delete('/api/files/trash'); await fetchItems(); };  // ← the missing one
+  const shareItem     = async (id, email) => api.post(`/api/files/${id}/share`, { email });
+  const downloadItem  = async (id) => {
     const { data } = await api.get(`/api/files/${id}/download`);
     window.open(data.url, '_blank');
   };
 
+  // ── navigation ──────────────────────────────────────────────────
   const openFolder = (id) => { setFolderId(id); setSearch(''); };
   const changeView = (v) => { setView(v); setFolderId(null); setSearch(''); };
 
+  // ⚠️ Everything the page can call MUST be listed here
   return {
     view, folderId, search, sort, items, loading, error, conflictQueue,
     setSearch, setSort, openFolder, changeView,
     uploadFiles, resolveConflict, cancelConflicts,
     createFolder, renameItem, moveItem, copyItem,
-    deleteItem, restoreItem, deleteForever, shareItem, downloadItem,
+    deleteItem, restoreItem, deleteForever, emptyTrash, shareItem, downloadItem,
   };
 }

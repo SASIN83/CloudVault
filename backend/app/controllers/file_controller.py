@@ -5,7 +5,7 @@ from app.models.user import User
 from app.models.item import Item
 from app.views.file_views import (FolderCreate, RenameRequest, MoveRequest, ShareRequest,
                                   ShareResponse, FolderOption, ItemResponse, DownloadResponse)
-from app.services import file_service, s3_service        # ✏️ s3_service
+from app.services import file_service, s3_service
 from app.services.auth_service import get_current_user
 
 router = APIRouter(prefix="/api/files", tags=["Files"])
@@ -13,7 +13,7 @@ router = APIRouter(prefix="/api/files", tags=["Files"])
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
 
-# ── static routes (must come before /{parent_id}) ─────────────────────
+# ══════════ STATIC ROUTES — MUST stay ABOVE /{parent_id} & /{item_id} ══════════
 
 @router.post("/folders", response_model=ItemResponse, status_code=201)
 def create_folder(payload: FolderCreate, db: Session = Depends(get_db),
@@ -36,13 +36,18 @@ def trash(db: Session = Depends(get_db), user: User = Depends(get_current_user))
     return file_service.list_trash(db, user)
 
 
+@router.delete("/trash", status_code=204)
+def empty_trash(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    file_service.empty_trash(db, user)
+
+
 @router.get("/folder-options", response_model=list[FolderOption])
 def folder_options(exclude: int | None = Query(default=None),
                    db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     return file_service.folder_options(db, user, exclude)
 
 
-# ── folder listing & upload ────────────────────────────────────────────
+# ══════════ PARAMETERIZED ROUTES ══════════
 
 @router.get("/{parent_id}", response_model=list[ItemResponse])
 def list_folder(parent_id: int,
@@ -62,8 +67,6 @@ async def upload_file(parent_id: int, file: UploadFile,
     return file_service.save_upload(db, user, None if parent_id == 0 else parent_id,
                                     file.filename, content, conflict_action)
 
-
-# ── item actions ───────────────────────────────────────────────────────
 
 @router.post("/{item_id}/rename", response_model=ItemResponse)
 def rename(item_id: int, payload: RenameRequest,
@@ -97,8 +100,6 @@ def delete_forever(item_id: int, db: Session = Depends(get_db), user: User = Dep
     file_service.hard_delete(db, item_id, user)
 
 
-# ── sharing & secure download ──────────────────────────────────────────
-
 @router.post("/{item_id}/share", response_model=ShareResponse)
 def share(item_id: int, payload: ShareRequest,
           db: Session = Depends(get_db), user: User = Depends(get_current_user)):
@@ -117,5 +118,5 @@ def download(item_id: int, db: Session = Depends(get_db), user: User = Depends(g
     if not item or item.is_folder or item.deleted_at:
         raise HTTPException(404, "File not found")
     if not file_service.can_access(db, item, user):
-        raise HTTPException(403, "Access denied")          # ← enforces email-based sharing
+        raise HTTPException(403, "Access denied")
     return {"url": s3_service.presigned_download_url(item.s3_key, item.name), "filename": item.name}

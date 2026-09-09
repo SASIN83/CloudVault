@@ -1,3 +1,4 @@
+import { passwordError } from '../utils/password';
 import { useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';   // ← NEW
 import { useAuth } from '../context/AuthContext';
@@ -18,13 +19,25 @@ export default function AuthPage() {
   const submit = async (e) => {
     e.preventDefault();
     setError('');
+
+    // Client-side mirror of the backend policy (signup only)
+    if (mode === 'signup') {
+      const pwErr = passwordError(form.password);
+      if (pwErr) { setError(pwErr); return; }
+    }
+
     setBusy(true);
     try {
       if (mode === 'login') await login(form.email, form.password);
       else await signup(form.email, form.password, form.full_name);
-      navigate('/', { replace: true });                      // ← NEW: go to File Manager
+      navigate('/', { replace: true });
     } catch (err) {
-      setError(err.response?.data?.detail || 'Connection error. Is the backend running on port 8000?');
+      // Pydantic validation errors arrive as an array — flatten them
+      const d = err.response?.data?.detail;
+      const msg = Array.isArray(d)
+        ? d.map((x) => x.msg).join('. ')
+        : (d || 'Connection error. Is the backend running on port 8000?');
+      setError(msg);
     } finally {
       setBusy(false);
     }
@@ -113,6 +126,9 @@ export default function AuthPage() {
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
               />
+              <p className="mt-1 text-[11px] text-gray-400">
+                8+ characters — letters, special character numbers only, at least one of each
+                </p>
             </div>
 
             {error && (

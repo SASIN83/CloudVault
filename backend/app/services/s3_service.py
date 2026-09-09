@@ -3,6 +3,10 @@ from botocore.exceptions import ClientError
 from app.config import settings
 from urllib.parse import quote
 
+
+import logging
+logger = logging.getLogger(__name__)
+
 _client = None
 
 
@@ -23,12 +27,11 @@ def get_client():
 def upload_file(data: bytes, key: str) -> None:
     get_client().put_object(Bucket=settings.S3_BUCKET_NAME, Key=key, Body=data)
 
-
 def delete_file(key: str) -> None:
     try:
         get_client().delete_object(Bucket=settings.S3_BUCKET_NAME, Key=key)
-    except ClientError:
-        pass  # best-effort cleanup
+    except ClientError as e:
+        logger.warning("S3 delete failed for key %s: %s", key, e)   # was: silent pass
 
 
 def copy_file(src_key: str, dst_key: str) -> None:

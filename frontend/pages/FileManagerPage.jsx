@@ -116,6 +116,13 @@ export default function FileManagerPage() {
                 <span className="text-sm font-semibold text-gray-700">{TITLES[fm.view]}</span>
               )}
             </div>
+            {fm.view === 'trash' && (
+                <button
+                    onClick={() => run(() => fm.emptyTrash(), '🗑 Trash emptied — files removed from AWS S3')}
+                    className="bg-red-600 hover:bg-red-700 text-white rounded-lg px-3 py-2 text-sm font-semibold">
+                    Empty Trash
+                </button>
+                )}
             <select value={fm.sort} onChange={(e) => fm.setSort(e.target.value)}
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
               <option value="name">Sort: Name (A–Z)</option>
