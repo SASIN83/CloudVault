@@ -56,3 +56,18 @@ def presigned_download_url(key: str, filename: str, expires_in: int = 900) -> st
         },
         ExpiresIn=expires_in,
     )
+
+def presigned_put_url(key: str, content_type: str, expires_in: int = 900) -> str:
+    return get_client().generate_presigned_url(
+        "put_object",
+        Params={"Bucket": settings.S3_BUCKET_NAME, "Key": key, "ContentType": content_type},
+        ExpiresIn=expires_in,
+    )
+
+
+def head_object_size(key: str):
+    """Actual size in bytes, or None if the object never arrived."""
+    try:
+        return get_client().head_object(Bucket=settings.S3_BUCKET_NAME, Key=key)["ContentLength"]
+    except ClientError:
+        return None

@@ -40,26 +40,32 @@ export default function useFiles() {
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
   // ── uploads & duplicate conflicts ───────────────────────────────
+    // ── uploads: server-proxied (proven path) ──────────────────────────
   const uploadOne = async (file, action) => {
     const fd = new FormData();
     fd.append('file', file);
-    await api.post(`/api/files/upload/${folderId ?? 0}?conflict_action=${action}`, fd);
+    const qs = action ? `?conflict_action=${action}` : '';
+    await api.post(`/api/files/upload/${folderId ?? 0}${qs}`, fd);
   };
 
   const uploadFiles = async (files) => {
     const conflicts = [];
     let uploaded = 0;
     for (const file of files) {
-      const exists = items.some((i) => !i.is_folder && i.name === file.name);
-      if (exists) conflicts.push(file);
-      else { await uploadOne(file, 'rename'); uploaded++; }
+      try {
+        await uploadOne(file, null);          // no action → server returns 409 if duplicate
+        uploaded++;
+      } catch (e) {
+        if (e.response?.status === 409) conflicts.push(file);
+        else throw e;
+      }
     }
     if (conflicts.length) setConflictQueue((q) => [...q, ...conflicts]);
     await fetchItems();
     return { uploaded, conflicts: conflicts.length };
   };
 
-  const resolveConflict = async (action) => {
+  const resolveConflict = async (action) => {   // 'replace' | 'rename'
     const [file, ...rest] = conflictQueue;
     await uploadOne(file, action);
     setConflictQueue(rest);
@@ -77,8 +83,17 @@ export default function useFiles() {
   const restoreItem   = async (id)     => { await api.post(`/api/files/${id}/restore`); await fetchItems(); };
   const deleteForever = async (id)     => { await api.delete(`/api/files/${id}/permanent`); await fetchItems(); };
   const emptyTrash    = async ()       => { await api.delete('/api/files/trash'); await fetchItems(); };  // ← the missing one
-  const shareItem     = async (id, email) => api.post(`/api/files/${id}/share`, { email });
-  const downloadItem  = async (id) => {
+  const shareItem = async (id, email) => {
+    const { data } = await api.post(`/api/files/${id}/share`, { email });
+    await fetchItems();
+    return data.shared_emails;          // fresh list for the modal
+  };
+
+  const unshareItem = async (id, email) => {
+    const { data } = await api.delete(`/api/files/${id}/share/${encodeURIComponent(email)}`);
+    await fetchItems();
+    return data.shared_emails;
+  };  const downloadItem  = async (id) => {
     const { data } = await api.get(`/api/files/${id}/download`);
     window.open(data.url, '_blank');
   };
@@ -93,6 +108,6 @@ export default function useFiles() {
     setSearch, setSort, openFolder, changeView,
     uploadFiles, resolveConflict, cancelConflicts,
     createFolder, renameItem, moveItem, copyItem,
-    deleteItem, restoreItem, deleteForever, emptyTrash, shareItem, downloadItem,
+    deleteItem, restoreItem, deleteForever, emptyTrash, shareItem, downloadItem,unshareItem
   };
 }

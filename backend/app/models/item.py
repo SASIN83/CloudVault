@@ -19,7 +19,8 @@ class Item(Base):
 
     parent_id = Column(Integer, ForeignKey("items.id"), nullable=True)
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-
+    upload_status = Column(String, nullable=False, default="ready")   # pending | ready
+    replaces_id = Column(Integer, ForeignKey("items.id"), nullable=True)
     owner = relationship("User")
     shares = relationship("ItemShare", back_populates="item", cascade="all, delete-orphan")
 

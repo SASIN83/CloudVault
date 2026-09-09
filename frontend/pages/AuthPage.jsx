@@ -15,7 +15,6 @@ export default function AuthPage() {
   if (localStorage.getItem('token')) {
     return <Navigate to="/" replace />;
   }
-
   const submit = async (e) => {
     e.preventDefault();
     setError('');
@@ -25,11 +24,14 @@ export default function AuthPage() {
       const pwErr = passwordError(form.password);
       if (pwErr) { setError(pwErr); return; }
     }
-
+    
     setBusy(true);
     try {
-      if (mode === 'login') await login(form.email, form.password);
-      else await signup(form.email, form.password, form.full_name);
+      // Normalize email here so frontend and backend agree on identity case/spacing
+      const email = form.email.trim().toLowerCase();
+      
+      if (mode === 'login') await login(email, form.password);
+      else await signup(email, form.password, form.full_name);
       navigate('/', { replace: true });
     } catch (err) {
       // Pydantic validation errors arrive as an array — flatten them
@@ -42,7 +44,6 @@ export default function AuthPage() {
       setBusy(false);
     }
   };
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-12">
       <div className="w-full max-w-md">

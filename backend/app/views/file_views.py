@@ -43,3 +43,17 @@ class ItemResponse(BaseModel):
 class DownloadResponse(BaseModel):
     url: str
     filename: str
+
+class UploadInitRequest(BaseModel):
+    parent_id: int | None = None
+    filename: str = Field(min_length=1, max_length=255)
+    size: int = Field(gt=0)
+    content_type: str | None = None
+    conflict_action: str | None = Field(default=None, pattern="^(replace|rename)$")
+
+
+class UploadInitResponse(BaseModel):
+    item_id: int
+    upload_url: str
+    key: str
+    final_name: str

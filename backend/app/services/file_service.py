@@ -7,7 +7,85 @@ from app.models.item import Item, ItemShare
 from app.models.user import User
 from app.services import s3_service
 
+UPLOAD_PENDING_MINUTES = 60
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
+
+def init_upload(db, user, parent_id, filename, size, content_type, conflict_action):
+    """Phase 1: validate, reserve final name, return a presigned PUT URL."""
+    _validate_parent(db, parent_id, user)
+    if not filename or not size or size <= 0:
+        raise HTTPException(400, "Invalid file metadata")
+    if size > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, "File exceeds the 50 MB limit")
+
+    existing = db.query(Item).filter(
+        Item.parent_id == parent_id, Item.owner_id == user.id, Item.name == filename,
+        Item.deleted_at.is_(None), Item.upload_status == "ready").first()
+    if existing and existing.is_folder:
+        raise HTTPException(400, "A folder with this name already exists")
+    if existing and conflict_action is None:
+        raise HTTPException(409, "File already exists")
+
+    replaces_id = None
+    if existing and conflict_action == "rename":
+        filename = unique_name(db, parent_id, filename, user.id)
+    elif existing and conflict_action == "replace":
+        replaces_id = existing.id
+
+    ext = os.path.splitext(filename)[1]
+    s3_key = f"users/{user.id}/{uuid4().hex}{ext}"
+    item = Item(name=filename, is_folder=False, size=size, s3_key=s3_key,
+                parent_id=parent_id, owner_id=user.id,
+                upload_status="pending", replaces_id=replaces_id)
+    db.add(item); db.commit(); db.refresh(item)
+
+    return {
+        "item_id": item.id,
+        "upload_url": s3_service.presigned_put_url(s3_key, content_type or "application/octet-stream"),
+        "key": s3_key,
+        "final_name": filename,
+    }
+
+
+def confirm_upload(db, user, item_id):
+    """Phase 2: verify bytes landed in S3, finalize row, clean up replaced file."""
+    item = _owned_item(db, item_id, user)
+    if item.upload_status != "pending":
+        raise HTTPException(409, "Upload already confirmed")
+
+    actual = s3_service.head_object_size(item.s3_key)
+    if actual is None:
+        raise HTTPException(400, "Upload not received by S3 — please retry")
+    if actual > MAX_UPLOAD_BYTES:                      # client lied about size
+        s3_service.delete_file(item.s3_key)
+        db.delete(item); db.commit()
+        raise HTTPException(413, "File exceeds the 50 MB limit")
+
+    item.size = actual
+    item.upload_status = "ready"
+    if item.replaces_id:
+        old = db.get(Item, item.replaces_id)
+        if old:
+            if old.s3_key:
+                s3_service.delete_file(old.s3_key)
+            db.delete(old)
+        item.replaces_id = None
+    db.commit(); db.refresh(item)
+    return serialize(item, user)
+
+
+def purge_abandoned_uploads(db: Session) -> int:
+    """Clients that vanished mid-upload leave pending rows — reap them."""
+    cutoff = datetime.utcnow() - timedelta(minutes=UPLOAD_PENDING_MINUTES)
+    stale = db.query(Item).filter(Item.upload_status == "pending", Item.created_at < cutoff).all()
+    for it in stale:
+        if it.s3_key:
+            s3_service.delete_file(it.s3_key)
+        db.delete(it)
+    if stale:
+        db.commit()
+    return len(stale)
 # ───────────────────────── helpers ─────────────────────────
 
 def _owned_item(db: Session, item_id: int, user: User) -> Item:

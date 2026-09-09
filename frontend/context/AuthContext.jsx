@@ -19,7 +19,8 @@ export function AuthProvider({ children }) {
     await login(email, password); // auto-login after signup
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try { await api.post('/api/auth/logout'); } catch { /* token already dead */ }
     localStorage.removeItem('token');
     setUser(null);
   };

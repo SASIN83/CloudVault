@@ -68,7 +68,25 @@ export default function FileManagerPage() {
     if (item.is_folder) return openFolder(item);
     run(() => fm.downloadItem(item.id), '🔐 Signed S3 URL generated — download started');
   };
+    const handleShare = async (email) => {
+    try {
+      const emails = await fm.shareItem(shareTarget.id, email);
+      setShareTarget({ ...shareTarget, shared_emails: emails });   // live-update the list
+      toast(`🔗 Shared with ${email}`);
+    } catch (e) {
+      toast(e.response?.data?.detail || 'Could not share', 'error');
+    }
+  };
 
+  const handleUnshare = async (email) => {
+    try {
+      const emails = await fm.unshareItem(shareTarget.id, email);
+      setShareTarget({ ...shareTarget, shared_emails: emails });
+      toast(`🚫 Access removed for ${email}`);
+    } catch (e) {
+      toast(e.response?.data?.detail || 'Could not remove access', 'error');
+    }
+  };
   const resolveConflict = async (action) => {
     try {
       await fm.resolveConflict(action);
@@ -116,18 +134,21 @@ export default function FileManagerPage() {
                 <span className="text-sm font-semibold text-gray-700">{TITLES[fm.view]}</span>
               )}
             </div>
+            
             {fm.view === 'trash' && (
-                <button
-                    onClick={() => run(() => fm.emptyTrash(), '🗑 Trash emptied — files removed from AWS S3')}
-                    className="bg-red-600 hover:bg-red-700 text-white rounded-lg px-3 py-2 text-sm font-semibold">
-                    Empty Trash
-                </button>
-                )}
+              <button
+                onClick={() => run(() => fm.emptyTrash(), '🗑 Trash emptied — files removed from AWS S3')}
+                className="bg-red-600 hover:bg-red-700 text-white rounded-lg px-3 py-2 text-sm font-semibold">
+                Empty Trash
+              </button>
+            )}
+            
             <select value={fm.sort} onChange={(e) => fm.setSort(e.target.value)}
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
               <option value="name">Sort: Name (A–Z)</option>
               <option value="date">Sort: Date (newest)</option>
             </select>
+            
             <div className="flex border border-gray-300 rounded-lg overflow-hidden text-sm">
               <button onClick={() => setMode('grid')} className={`px-3 py-2 ${mode === 'grid' ? 'bg-indigo-600 text-white' : 'bg-white'}`}>▦</button>
               <button onClick={() => setMode('list')} className={`px-3 py-2 ${mode === 'list' ? 'bg-indigo-600 text-white' : 'bg-white'}`}>☰</button>
@@ -146,10 +167,17 @@ export default function FileManagerPage() {
 
       <ConflictModal file={fm.conflictQueue[0]} items={fm.items}
         onResolve={resolveConflict} onCancel={fm.cancelConflicts} />
-      <ShareModal item={shareTarget} onClose={() => setShareTarget(null)}
-        onSubmit={(email) => run(async () => { await fm.shareItem(shareTarget.id, email); setShareTarget(null); }, `🔗 Shared with ${email}`)} />
+        
+            <ShareModal
+        item={shareTarget}
+        onClose={() => setShareTarget(null)}
+        onShare={handleShare}
+        onUnshare={handleUnshare}
+      />
+        
       <MoveModal item={moveTarget} onClose={() => setMoveTarget(null)}
         onSubmit={(target) => run(async () => { await fm.moveItem(moveTarget.id, target); setMoveTarget(null); }, '📂 Moved')} />
+        
       <NewFolderModal open={folderModal} onClose={() => setFolderModal(false)}
         onSubmit={(name) => run(() => fm.createFolder(name), `📁 Folder "${name}" created`)} />
     </>

@@ -12,3 +12,4 @@ class User(Base):
     full_name = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    tokens_revoked_before = Column(DateTime, nullable=True)   # "logout everywhere" cutoff

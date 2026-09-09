@@ -6,7 +6,11 @@ from app.config import settings
 from app.database import Base, engine, SessionLocal
 import app.models                                  # noqa: F401 — register models
 from app.controllers import auth_controller, file_controller
-from app.services import file_service
+from app.services import auth_service, file_service
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from app.services.rate_limiter import limiter
 
 Base.metadata.create_all(bind=engine)              # dev convenience; Alembic in prod
 
@@ -19,8 +23,10 @@ async def _trash_purge_loop():
         db = SessionLocal()
         try:
             n = file_service.purge_expired_trash(db)
-            if n:
-                print(f"[purge] removed {n} expired trash item(s) from S3 + DB")
+            m = file_service.purge_abandoned_uploads(db)
+            r = auth_service.purge_revoked_tokens(db)
+            if n or m or r:
+                print(f"[purge] trash={n} abandoned_uploads={m} revoked_tokens={r}")
         except Exception as e:                     # never kill the loop
             print("[purge] error:", e)
         finally:
@@ -32,6 +38,8 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()                            # purge once at startup
     try:
         file_service.purge_expired_trash(db)
+        file_service.purge_abandoned_uploads(db)
+        auth_service.purge_revoked_tokens(db)
     finally:
         db.close()
     task = asyncio.create_task(_trash_purge_loop())
@@ -40,6 +48,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="CloudVault API", version="1.0.0", lifespan=lifespan)
+
+# ── Rate limiting (must attach AFTER app is created) ──
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

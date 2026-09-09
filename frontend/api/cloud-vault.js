@@ -45,6 +45,9 @@ api.interceptors.response.use(
       localStorage.removeItem('token');
       window.location.href = '/login';
     }
+    if (err.response?.status === 429) {
+      err.message = err.response?.data?.error || 'Too many requests — please slow down';
+    }
     return Promise.reject(err);
   }
 );
